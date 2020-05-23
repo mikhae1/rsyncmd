@@ -22,7 +22,13 @@ You could use `.env` files to set all your variables. Store this files at your p
 - Setup SSH login to remote server
 - You may want to copy `rsyncmd` to your `bin` `PATH`:
 
-      $ cp ./rsyncmd /usr/local/bin
+      $ cp rsyncmd /usr/local/bin
+
+## Usage
+
+```sh
+SRV=user@remote_server CMD='npm start' rsyncmd
+```
 
 ## Variables
 

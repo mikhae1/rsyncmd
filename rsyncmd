@@ -19,7 +19,13 @@ SRV="$SRV"  # remote server to rsync $SRC, connect and run $CMD
 
 
 main() {
-  dotenv_export $SRC/.env
+  local srv="$1"
+  local cmd="$2"
+
+  dotenv_export "$SRC/.env"
+
+  SRV="${srv:-$SRV}"
+  CMD="${cmd:-$CMD}"
 
   if [[ -z "$SRV" ]]; then
     log Error: "SRV" variable is not set!
