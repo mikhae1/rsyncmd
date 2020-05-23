@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+#
+# Rsync $SRC directory to ssh://$SRV:$DST and run $CMD afterwards
+# Copyright(c) 2019 minko@yandex.ru
+
+[[ ! -z "$DEBUG" ]] && set -x
+
+# globals with defaults
+SRC="${SRC:-$PWD}"          # source directory
+DST="${DST:-~/${SRC##*/}}"  # remote destination folder for $SRC rsyncing
+CMD="${CMD:-echo Done!}"    # command to run remotely at $DST folder
+SSH_ALIVE_INT=${SSH_ALIVE_INT:-30}  # SSH keep alive interval
+SSH_OPTS=${SSH_OPTS:--t -A -o ServerAliveInterval=$SSH_ALIVE_INT}   # SSH options
+RSYNC_OPTS="${RSYNC_OPTS:--chazi --delete}"                         # Rsync options
+RSYNC_SKIP="${RSYNC_SKIP:-.terraform,.vagrant,node_modules,*.pyc}"  # Rsync excluded directories
+
+# required params
+SRV="$SRV"  # remote server to rsync $SRC, connect and run $CMD
+
+
+main() {
+  dotenv_export $SRC/.env
+
+  if [[ -z "$SRV" ]]; then
+    log Error: "SRV" variable is not set!
+    echo You should specify destination host variable
+    exit 1
+  fi
+
+  local rsync_options="$RSYNC_OPTS"
+  [[ ! -z "$DEBUG" ]] && rsync_options+=' -v'
+
+  if [[ ! -z "$RSYNC_SKIP" ]]; then
+    IFS=','; arr=($RSYNC_SKIP); unset IFS;
+    sep='--exclude='
+    excludes=$(printf "%s " "${arr[@]/#/$sep}")
+    rsync_options+=" $excludes"
+  fi
+
+  log "Rsyncing '$SRC' directory to '$SRV:$DST'"
+  run "rsync $rsync_options $SRC/ $SRV:$DST"
+
+  log "Running '$CMD' at $SRV"
+  run "ssh $SSH_OPTS $SRV 'cd $DST && $CMD'"
+}
+
+#######################################
+# Run command and stop on error
+# Arguments:
+#   Shell command
+#######################################
+run() {
+  local cmd="$@"
+
+  echo -e "$ $cmd"
+  eval "$cmd"
+  local status=$?
+  if [[ $status != 0 ]]; then
+    log "Unable to run: $cmd"
+    exit $status
+  fi
+}
+
+#######################################
+# Pretty print a message to stderr
+# Arguments:
+#   String
+#######################################
+log() {
+  tput setaf 2
+  echo -e $@ >&2
+  tput sgr0
+}
+
+#######################################
+# Parse .env file variables
+# Arguments:
+#   Path to .env file
+#######################################
+dotenv_export() {
+  local efile="${1:-$PWD/.env}"
+
+  [ -f $efile ] || return
+
+  function join { local IFS="="; echo "$*"; }
+
+  log "Parsing dotenv file: $efile"
+
+  # Parse dotenv file
+  # Should work on both BSD and Linux and with special characters (' ', '=')
+  local IFS
+  while IFS='' read -r line; do
+    [[ ! -n "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+
+    IFS='=' read -ra var_arr <<< "$line"
+
+    key="${var_arr[0]}"
+    val=$(join "${var_arr[@]:1}")
+
+    export "$key"="$val"
+  done < "$efile"
+
+  unset -f join
+}
+
+main "$@"
